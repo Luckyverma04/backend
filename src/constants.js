@@ -1,1 +1,1 @@
-export const DB_NAME ="videotube"
+export const DB_NAME = process.env.DB_NAME || "project0";

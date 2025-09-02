@@ -1,28 +1,50 @@
-import {v2 as cloudinary} from 'cloudinary';
-import fs from 'fs';
+import { v2 as cloudinary } from "cloudinary";
+import fs from "fs";
+import dotenv from "dotenv";
 
-// Configuration
-    cloudinary.config({ 
-        cloud_name: 'process.env.CLOUDINARY_CLOUD_NAME', 
-        api_key: 'process.env.CLOUDINARY_API_KEY', 
-        api_secret:'process.env.CLOUDINARY_API_SECRET' 
+// load .env
+dotenv.config();
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+const uploadOnCloudinary = async (filePath) => {
+  try {
+    if (!filePath) {
+      console.log("❌ No file path provided");
+      return null;
+    }
+
+    console.log("📂 Uploading file from path:", filePath);
+
+    // actual upload
+    const response = await cloudinary.uploader.upload(filePath, {
+      resource_type: "auto",
     });
 
-    const uploadOnCloudinary = async (filePath) => {
-        try{
-            if(!filePath)return null;
-       const response=  await   cloudinary.uploader.upload(filePath, {
-                resource_type: "auto"
-                 
-        })
-      console.log("File is uploaded on cloudinary",
-      response.url);
-      return response;
-    }catch(error){
-        fs.unlinkSync(filePath);
-        console.log("Error while uploading file on cloudinary", error.message);
-        return null;
+    console.log("✅ Cloudinary Upload Success:", response.secure_url);
 
+    // delete local file if upload success
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log("🗑️ Local file deleted:", filePath);
     }
+
+    return response;
+  } catch (error) {
+    console.error("❌ Cloudinary Upload Error:", error);
+
+    // ensure file is cleaned up on error
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+      console.log("🗑️ Local file deleted after error:", filePath);
     }
-    export{uploadOnCloudinary} ;
+
+    return null;
+  }
+};
+
+export { uploadOnCloudinary };

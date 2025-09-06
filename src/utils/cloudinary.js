@@ -33,7 +33,11 @@ const uploadOnCloudinary = async (filePath) => {
       console.log("🗑️ Local file deleted:", filePath);
     }
 
-    return response;
+    // return only what you need
+    return {
+      url: response.secure_url,
+      public_id: response.public_id,
+    };
   } catch (error) {
     console.error("❌ Cloudinary Upload Error:", error);
 
@@ -46,5 +50,6 @@ const uploadOnCloudinary = async (filePath) => {
     return null;
   }
 };
+
 
 export { uploadOnCloudinary };

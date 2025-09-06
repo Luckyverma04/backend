@@ -4,6 +4,7 @@ import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import {ApiError} from "../utils/ApiError.js";
 import jwt from "jsonwebtoken"
+import { subscribe } from "diagnostics_channel";
 
 const generateAccessAndRefreshTokens = async(userId)=>{
   try {
@@ -255,62 +256,224 @@ $set:{fullName, email}
 
 })
 
-const updateUserAvatar = asyncHandler(async(req,res)=>{
-const avatarLocalPath =  req.file?.path
+const updateUserAvatar = asyncHandler(async (req, res) => {
+  const avatarLocalPath = req.file?.path;
 
-if(!avatarLocalPath){
-  throw new ApiError(400,"avatar is missing!")
-}
+  if (!avatarLocalPath) {
+    throw new ApiError(400, "Avatar is missing!");
+  }
 
-const avatar = await uploadOnCloudinary(avatarLocalPath)
-if(!avatar.url){
-  throw new ApiError(500,"could not upload avatar, try again")
-}
+  // Get user first (to access old avatar)
+  const existingUser = await User.findById(req.user._id);
+  if (!existingUser) {
+    throw new ApiError(404, "User not found");
+  }
 
-const user = await User.findByIdAndUpdate(req.user._id,{
-  $set:{avatar:avatar.url}
+  // Upload new avatar
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+  if (!avatar?.url) {
+    throw new ApiError(500, "Could not upload avatar, try again");
+  }
+
+  // If old avatar exists, delete it from Cloudinary
+  if (existingUser.avatar?.public_id) {
+    await cloudinary.uploader.destroy(existingUser.avatar.public_id);
+  }
+
+  // Save new avatar in DB (both url + public_id)
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: {
+        avatar: {
+          url: avatar.url,
+          public_id: avatar.public_id,
+        },
+      },
+    },
+    { new: true, validateBeforeSave: false }
+  ).select("-password");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Avatar updated successfully"));
+});
+
+const updateUserCoverImage = asyncHandler(async (req, res) => {
+  const coverImageLocalPath = req.file?.path;
+
+  if (!coverImageLocalPath) {
+    throw new ApiError(400, "Cover image is missing!");
+  }
+
+  // 1️⃣ Get existing user
+  const existingUser = await User.findById(req.user._id);
+  if (!existingUser) {
+    throw new ApiError(404, "User not found");
+  }
+
+  // 2️⃣ Upload new cover image
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+  if (!coverImage?.url) {
+    throw new ApiError(500, "Could not upload cover image, try again");
+  }
+
+  // 3️⃣ Delete old cover image from Cloudinary (if exists)
+  if (existingUser.coverImage?.public_id) {
+    await cloudinary.uploader.destroy(existingUser.coverImage.public_id);
+  }
+
+  // 4️⃣ Update DB with new image { url, public_id }
+  const user = await User.findByIdAndUpdate(
+    req.user._id,
+    {
+      $set: {
+        coverImage: {
+          url: coverImage.url,
+          public_id: coverImage.public_id,
+        },
+      },
+    },
+    { new: true, validateBeforeSave: false }
+  ).select("-password");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, user, "Cover image updated successfully"));
+});
+
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+
+  if (!username?.trim()) {
+    throw new ApiError(400, "username is missing");
+  }
+
+  const channel = await User.aggregate([
+    {
+      $match: { username: username.toLowerCase() }
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers",
+      }
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedToChannels",
+      }
+    },
+    {
+      $addFields: {
+        subscribersCount: { $size: "$subscribers" },
+        subscribedToChannelsCount: { $size: "$subscribedToChannels" },
+        isSubscribed: {
+          $cond: {
+            if: {
+              $in: [
+                new mongoose.Types.ObjectId(req.user?._id),
+                "$subscribers.subscriber"
+              ]
+            },
+            then: true,
+            else: false
+          }
+        }
+      }
+    },
+    {
+      $project: {
+        fullName: 1,
+        username: 1,
+        email: 1,
+        avatar: 1,
+        coverImage: 1,
+        subscribersCount: 1,
+        subscribedToChannelsCount: 1,
+        isSubscribed: 1,
+        createdAt: 1
+      }
+    }
+  ]);
+
+  if (!channel?.length) {
+    throw new ApiError(404, "channel not exist");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, channel[0], "User channel profile fetched successfully"));
+});
+
+const getWatchHistory = asyncHandler(async (req, res) => {
+ const user = await User.aggregate([
+  {
+    $match:{
+      _id: new mongoose.Types.ObjectId(req.user._id)
+    }
+  },{
+  $lookup:{
+    from:"videos",
+    localField:"watchHistory",
+    foreignField:"_id",
+    as:"watchHistory",
+    pipeline:[
+      {
+        $lookup:{
+          from:"users",
+          localField:"owner",
+          foreignField:"_id",
+          as:"owner",
+          pipeline:[
+            {
+              $project:{
+                fullName:1,
+                username:1,
+                avatar:1,
+
+              }
+            }
+          ]
+
+        }
+      },
+      {
+        $addFields:{
+          owner:{
+            $first:"$owner"
+          }
+        }
+      }
+    ]
+  }
 },
 
-{new:true,
-validateBeforeSave:false,
-}).select("-password")
-return res.status(200)
+])
+  if (!user.length) {
+    throw new ApiError(404, "User not found");
+  }
 
-.json(new ApiResponse(200,avatar,"avatar updated successfully"))
+  return res
+  .status(200)
+  .json(new ApiResponse(200,user[0].watchHistory, "Watch history fetched successfully"));
+  })
 
-})
-
-const updateUserCoverImage= asyncHandler(async(req,res)=>{
-const coverImageLocalPath =  req.file?.path
-
-if(!coverImageLocalPath){
-  throw new ApiError(400,"avatar is missing!")
-}
-
-const coverImage = await uploadOnCloudinary(coverImageLocalPath)
-if(!coverImage.url){
-  throw new ApiError(500,"could not upload coverImage, try again")
-}
-
-const user = await User.findByIdAndUpdate(req.user._id,{
-  $set:{coverImage:coverImage.url}
-},
-
-{new:true,
-validateBeforeSave:false,
-}).select("-password")
-return res.status(200)
-.json(new ApiResponse(200,avatar,"coverImage updated successfully"))
-
-})
-
-
-export { registerUser };
-export { loginUser };
-export { logoutUser };
-export{refreshAccessToken};
-export {changeCurrentUserPassword};
-export {getCurrentUser};
-export {updateAccountDetails};
-export {updateUserAvatar};
-export {updateUserCoverImage};
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshAccessToken,
+  changeCurrentUserPassword,
+  getCurrentUser,
+  updateAccountDetails,
+  updateUserAvatar,
+  updateUserCoverImage,
+  getUserChannelProfile,
+  getWatchHistory,
+};

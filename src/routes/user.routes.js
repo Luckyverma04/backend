@@ -1,4 +1,5 @@
 import { Router } from "express";
+import mongoose from "mongoose";
 import { loginUser, 
     registerUser,
     logoutUser,
@@ -8,7 +9,9 @@ import { loginUser,
      updateAccountDetails, 
      updateUserAvatar,
      getUserChannelProfile,
-     getWatchHistory} from "../controllers/user.controllers.js"
+     getWatchHistory,
+    updateUserCoverImage,
+    } from "../controllers/user.controllers.js"
 import{upload} from '../middlewares/multer.middleware.js'
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 
@@ -38,19 +41,20 @@ router.route("/change-password").post( verifyJWT ,
 router.route("/current-user").get(verifyJWT,
     getCurrentUser)
 
-router.route("update-account").patch(verifyJWT,
+router.route("/update-account").patch(verifyJWT,
     updateAccountDetails)
 
-    router.route("/avatar").patch(verifyJWT,upload.single('avatar'),
+ router.route("/avatar").patch(verifyJWT,upload.single('avatar'),
     updateUserAvatar)
 
-router.route("/cover-image").patch(verifyJWT,upload.single('/coverImage'),
+router.route("/cover-image").patch(verifyJWT,upload.single('coverImage'),
     updateUserCoverImage)
 
   router.route("/c/:username").get(verifyJWT,
         getUserChannelProfile)
 
-        router.route("/watch-history").get(verifyJWT,
+        
+     router.route("/watch-history").get(verifyJWT,
             getWatchHistory)
 
 

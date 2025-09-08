@@ -5,6 +5,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import {ApiError} from "../utils/ApiError.js";
 import jwt from "jsonwebtoken"
 import { subscribe } from "diagnostics_channel";
+import mongoose from "mongoose";
 
 const generateAccessAndRefreshTokens = async(userId)=>{
   try {
@@ -26,11 +27,6 @@ const generateAccessAndRefreshTokens = async(userId)=>{
 const registerUser = asyncHandler(async (req, res) => {
   const { fullName, email, username, password } = req.body;
 
-//   console.log("📩 email:", email);
-//   console.log("👤 username:", username);
-//   console.log("req.files:", req.files);
-// console.log("req.body:", req.body);
-
   // Validation
   if ([fullName, email, username, password].some((field) => !field?.trim())) {
     throw new ApiError(400, "All fields are required");
@@ -46,13 +42,13 @@ const registerUser = asyncHandler(async (req, res) => {
   }
 
   // File paths (multer fields)
-  const avatarLocalPath = req.files?.avatar?.[0]?.path; // for upload.fields
-  const coverImageLocalPath = req.files?.coverImage?.[0]?.path;
-
-// let coverImageLocalPath;
-// if(req.files && Array.isArray(req.file.coverImage) && req.files.coverImage.length > 0) {
-//   coverImageLocalPath = req.files.coverImage[0].path;
-// }
+  const avatarLocalPath = req.files?.avatar?.[0]?.path;
+  
+  // Handle cover image - check if it exists first
+  let coverImageLocalPath;
+  if (req.files && Array.isArray(req.files.coverImage) && req.files.coverImage.length > 0) {
+    coverImageLocalPath = req.files.coverImage[0].path;
+  }
 
   if (!avatarLocalPath) {
     throw new ApiError(400, "Avatar is required");
@@ -60,21 +56,37 @@ const registerUser = asyncHandler(async (req, res) => {
 
   // Upload to cloudinary
   const avatar = await uploadOnCloudinary(avatarLocalPath);
-  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+  let coverImage;
+  if (coverImageLocalPath) {
+    coverImage = await uploadOnCloudinary(coverImageLocalPath);
+  }
 
-  if (!avatar) {
+  if (!avatar || !avatar.url) {
     throw new ApiError(400, "Could not upload avatar, try again");
   }
 
-  // Save user
-  const user = await User.create({
+  // Prepare user data
+  const userData = {
     fullName,
-    avatar: avatar.secure_url, // ✅ use secure_url
-    coverImage: coverImage?.secure_url || "",
     email,
     username: username.toLowerCase(),
     password,
-  });
+    avatar: {
+      public_id: avatar.public_id,
+      url: avatar.secure_url || avatar.url, // Use secure_url if available, fallback to url
+    }
+  };
+
+  // Add cover image only if it exists
+  if (coverImage) {
+    userData.coverImage = {
+      public_id: coverImage.public_id,
+      url: coverImage.secure_url || coverImage.url,
+    };
+  }
+
+  // Save user
+  const user = await User.create(userData);
 
   // Fetch created user without password
   const createdUser = await User.findById(user._id).select(
@@ -90,59 +102,60 @@ const registerUser = asyncHandler(async (req, res) => {
     .json(new ApiResponse(201, createdUser, "User registered successfully"));
 });
 
-const loginUser = asyncHandler(async(req,res)=>{
-   // req.body->data
-   //username or email
-   //find the user 
-   //pass check
-   //access and refresh token
-   // send cookie and send res
+const loginUser = asyncHandler(async (req, res) => {
+  const { email, password, username } = req.body;
 
-   const{email,password,username}=req.body
+  if (!username && !email) {
+    throw new ApiError(400, "username or email is required");
+  }
 
-   if(!username && !email){
-    throw new ApiError(400,"username or password is required")
-   }
-
+  // Find user
   const user = await User.findOne({
-    $or:[{username},{email}]
-   })
-  
-   if(!user){
-    throw new ApiError(404,"user not exist")
-   }
+    $or: [{ username }, { email }],
+  });
 
-  const isPasswordValid =  await user.isPasswordCorrect
-  (password)
+  if (!user) {
+    throw new ApiError(404, "user not exist");
+  }
 
- if(!isPasswordValid){
-    throw new ApiError(401,"Invalid user credentials")
+  // Validate password
+  const isPasswordValid = await user.isPasswordCorrect(password);
+  if (!isPasswordValid) {
+    throw new ApiError(401, "Invalid user credentials");
+  }
 
-   }
-
-const {accessToken,refreshToken} =
-await generateAccessAndRefreshTokens(user._id)
-
-const loggeddInUser = await User.findById(user._id).
-select("-password -refreshToken")
-
-const options = {
-  httpOnly: true,
-  secure: true,
-};
-
-return res
-  .status(200)
-  .cookie("accessToken", accessToken, options)
-  .cookie("refreshToken", refreshToken, options)
-  .json(
-    new ApiResponse(
-      200,
-      { user: loggeddInUser, accessToken, refreshToken },
-      "User logged in successfully"
-    )
+  // Generate tokens
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    user._id
   );
-})
+
+  // ⬅️ Save refreshToken into DB
+  user.refreshToken = refreshToken;
+  await user.save({ validateBeforeSave: false });
+
+  // Exclude sensitive fields
+  const loggedInUser = await User.findById(user._id).select(
+    "-password -refreshToken"
+  );
+
+  const options = {
+    httpOnly: true,
+    secure: true, // change to false if testing without https
+  };
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json(
+      new ApiResponse(
+        200,
+        { user: loggedInUser, accessToken, refreshToken },
+        "User logged in successfully"
+      )
+    );
+});
+
 
 const logoutUser = asyncHandler(async(req,res)=>{
 
@@ -162,6 +175,7 @@ return res.status(200).clearCookie("accessToken",options)
 .clearCookie("refreshToken",options)
 .json(new ApiResponse(200,null,"logged out successfully"))
 })
+
 const refreshAccessToken = asyncHandler(async(req,res)=>{
 const incomingRefreshToken =  req.cookies.refreshToken || req.body.refreshToken
 if(!incomingRefreshToken){

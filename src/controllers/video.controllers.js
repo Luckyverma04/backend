@@ -115,32 +115,29 @@ const updateVideo = asyncHandler(async(req,res)=>{
 })
 const deleteVideo = asyncHandler(async (req, res) => {
     const { id } = req.params;
+    console.log("DELETE request received for video:", id);
 
     if (!mongoose.Types.ObjectId.isValid(id)) {
         throw new ApiError("Invalid video id", 400);
     }
 
-    const video = await Video.findById(id);
-    if (!video) {
+    // Find and delete in one step
+    const deletedVideo = await Video.findByIdAndDelete(id);
+
+    if (!deletedVideo) {
         throw new ApiError("Video not found", 404);
     }
 
-    if (video.owner.toString() !== req.user._id.toString()) {
+    // Authorization check after fetching the document
+    if (deletedVideo.owner.toString() !== req.user._id.toString()) {
         throw new ApiError("You are not authorized to delete this video", 403);
     }
 
-    console.log("CODE IS RUNNING FROM HERE", typeof video.deleteOne);
-
-    // ✅ FIX
-    await video.deleteOne();
-
-    await User.updateMany(
-        { subscriptions: video.owner },
-        { $pull: { subscriptions: video.owner } }
-    );
-
-    res.status(200).json(new ApiResponse("Video deleted successfully", video));
+    console.log("Video deleted successfully:", deletedVideo._id);
+    res.status(200).json(new ApiResponse("Video deleted successfully", deletedVideo));
 });
+
+
 
 const createVideo = asyncHandler(async (req,res) => {
     const { title, description } = req.body;

@@ -2,7 +2,6 @@ import mongoose,{Schema} from 'mongoose'
 import mongooseAggregatePaginate from 'mongoose-aggregate-paginate-v2'
 
 
-
 const videoSchema = new Schema({
 videoFile:{
     type:String,
@@ -11,13 +10,13 @@ videoFile:{
 },
 thumbnail:{
     type:String,
-    required:true,
+    required:false,
 },
 title:{
      type:String,
     required:true,
 },
-discription:{
+description:{
      type:String,
     required:true,
     minlength:[20,"You have to write atleast 20 words"],
@@ -25,7 +24,7 @@ discription:{
 },
 duration:{
      type:Number,
-    required:true,
+    required:false,
 },
 views:{
     type:Number,

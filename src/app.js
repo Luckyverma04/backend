@@ -19,6 +19,10 @@ import userRouter from './routes/user.routes.js'
 import videoRouter from './routes/video.routes.js'
 import commentRouter from'./routes/comment.routes.js'
 // import { deleteVideo } from './controllers/video.controllers.js'
+app.get("/", (req, res) => {
+    res.send("Welcome to my API server!");
+});
+
 // route declaration
 app.use("/api/v1/users",userRouter)
 app.use("/api/v1/videos",videoRouter)

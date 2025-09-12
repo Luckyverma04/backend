@@ -121,25 +121,21 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(409, "User already exists with this email or username");
   }
 
-  // File uploads
+  // File uploads (✅ avatar is now optional)
   const avatarLocalPath = req.files?.avatar?.[0]?.path;
-  let coverImageLocalPath;
-  if (req.files?.coverImage?.length > 0) {
-    coverImageLocalPath = req.files.coverImage[0].path;
+  let coverImageLocalPath = req.files?.coverImage?.[0]?.path;
+
+  let avatar, coverImage;
+
+  if (avatarLocalPath) {
+    avatar = await uploadOnCloudinary(avatarLocalPath);
+    if (!avatar || !avatar.url) {
+      throw new ApiError(400, "Could not upload avatar, try again");
+    }
   }
 
-  if (!avatarLocalPath) {
-    throw new ApiError(400, "Avatar is required");
-  }
-
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
-  let coverImage;
   if (coverImageLocalPath) {
     coverImage = await uploadOnCloudinary(coverImageLocalPath);
-  }
-
-  if (!avatar || !avatar.url) {
-    throw new ApiError(400, "Could not upload avatar, try again");
   }
 
   // Save user
@@ -148,10 +144,15 @@ const registerUser = asyncHandler(async (req, res) => {
     email,
     username: username.toLowerCase(),
     password,
-    avatar: {
-      public_id: avatar.public_id,
-      url: avatar.secure_url || avatar.url,
-    },
+    avatar: avatar
+      ? {
+          public_id: avatar.public_id,
+          url: avatar.secure_url || avatar.url,
+        }
+      : {
+          public_id: null,
+          url: "https://cdn-icons-png.flaticon.com/512/149/149071.png", // ✅ Default avatar URL
+        },
     coverImage: coverImage
       ? {
           public_id: coverImage.public_id,
@@ -168,7 +169,7 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Something went wrong, try again");
   }
 
-  // ✅ Send Welcome / Verification Email
+  // ✅ Send Welcome Email
   await sendEmail({
     to: email,
     subject: "Welcome to MyApp 🎉",
@@ -185,6 +186,7 @@ const registerUser = asyncHandler(async (req, res) => {
     .status(201)
     .json(new ApiResponse(201, createdUser, "User registered successfully & email sent"));
 });
+
 
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password, username } = req.body;

@@ -232,5 +232,77 @@ const addComment = asyncHandler(async (req, res) => {
     }
 });
 
+const updateComment = asyncHandler(async (req, res) => {
+    try {
+        const { commentId } = req.params;
+        const { content } = req.body;
+        const userId = req.user?._id;
 
-export { getVideoComments,addComment };
+        console.log("Update Comment Debug:");
+        console.log("Comment ID:", commentId);
+        console.log("User ID:", userId);
+        console.log("New content:", content);
+        console.log("Request body:", req.body);
+
+        // Validate input
+        if (!commentId?.trim() || !mongoose.Types.ObjectId.isValid(commentId)) {
+            throw new ApiError(400, "Valid comment ID is required");
+        }
+
+        if (!content?.trim()) {
+            throw new ApiError(400, "Comment content is required for update");
+        }
+
+        if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
+            throw new ApiError(401, "User authentication required");
+        }
+
+        // Find the comment
+        const comment = await Comment.findById(commentId);
+        if (!comment) {
+            throw new ApiError(404, "Comment not found");
+        }
+
+        // Check if user owns the comment
+        if (comment.owner.toString() !== userId.toString()) {
+            throw new ApiError(403, "You can only update your own comments");
+        }
+
+        // Update the comment
+        const updatedComment = await Comment.findByIdAndUpdate(
+            commentId,
+            {
+                $set: {
+                    content: content.trim(),
+                    isEdited: true
+                }
+            },
+            { 
+                new: true, // Return the updated document
+                runValidators: true // Run model validations
+            }
+        ).populate('owner', 'username avatar fullName email');
+
+        return res.status(200).json(
+            new ApiResponse(200, updatedComment, "Comment updated successfully")
+        );
+
+    } catch (error) {
+        console.error("Error updating comment:", error);
+        
+        if (error instanceof ApiError) {
+            throw error;
+        }
+        
+        if (error.name === 'CastError') {
+            throw new ApiError(400, "Invalid comment ID format");
+        }
+        
+        throw new ApiError(500, error.message || "Server error while updating comment");
+    }
+});
+
+export { getVideoComments,
+    addComment ,
+    updateComment
+};

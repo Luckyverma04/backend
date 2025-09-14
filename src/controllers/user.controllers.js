@@ -8,6 +8,7 @@ import { subscribe } from "diagnostics_channel";
 import mongoose from "mongoose";
  import nodemailer from "nodemailer";
 import  sendEmail from "../utils/sendEmail.js"
+import { v2 as cloudinary } from 'cloudinary'
 const generateAccessAndRefreshTokens = async(userId)=>{
   try {
    const user = await User.findById(userId)
@@ -103,7 +104,6 @@ const generateAccessAndRefreshTokens = async(userId)=>{
 //     .json(new ApiResponse(201, createdUser, "User registered successfully"));
 // });
 
-
 const registerUser = asyncHandler(async (req, res) => {
   const { fullName, email, username, password } = req.body;
 
@@ -121,44 +121,54 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(409, "User already exists with this email or username");
   }
 
-  // File uploads
+  // File uploads - Make avatar optional
   const avatarLocalPath = req.files?.avatar?.[0]?.path;
   let coverImageLocalPath;
   if (req.files?.coverImage?.length > 0) {
     coverImageLocalPath = req.files.coverImage[0].path;
   }
 
-  // if (!avatarLocalPath) {
-  //   throw new ApiError(400, "Avatar is required");
-  // }
+  // Upload avatar only if provided
+  let avatar;
+  if (avatarLocalPath) {
+    avatar = await uploadOnCloudinary(avatarLocalPath);
+    if (!avatar?.url) {
+      throw new ApiError(400, "Could not upload avatar, try again");
+    }
+  }
 
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
+  // Upload cover image only if provided
   let coverImage;
   if (coverImageLocalPath) {
     coverImage = await uploadOnCloudinary(coverImageLocalPath);
   }
 
-  if (!avatar || !avatar.url) {
-    throw new ApiError(400, "Could not upload avatar, try again");
-  }
-
-  // Save user
-  const user = await User.create({
+  // Prepare user data
+  const userData = {
     fullName,
     email,
     username: username.toLowerCase(),
     password,
-    avatar: {
+  };
+
+  // Add avatar only if uploaded
+  if (avatar) {
+    userData.avatar = {
       public_id: avatar.public_id,
       url: avatar.secure_url || avatar.url,
-    },
-    coverImage: coverImage
-      ? {
-          public_id: coverImage.public_id,
-          url: coverImage.secure_url || coverImage.url,
-        }
-      : undefined,
-  });
+    };
+  }
+
+  // Add cover image only if uploaded
+  if (coverImage) {
+    userData.coverImage = {
+      public_id: coverImage.public_id,
+      url: coverImage.secure_url || coverImage.url,
+    };
+  }
+
+  // Save user
+  const user = await User.create(userData);
 
   const createdUser = await User.findById(user._id).select(
     "-password -refreshToken"
@@ -168,23 +178,29 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Something went wrong, try again");
   }
 
-  // ✅ Send Welcome / Verification Email
-  await sendEmail({
-    to: email,
-    subject: "Welcome to MyApp 🎉",
-    html: `
-      <h2>Hello ${fullName},</h2>
-      <p>Thank you for registering at <b>MyApp</b>!</p>
-      <p>Your account has been created successfully.</p>
-      <br/>
-      <p>Regards,<br/>MyApp Team</p>
-    `,
-  });
+  // Send Welcome Email (with error handling)
+  try {
+    await sendEmail({
+      to: email,
+      subject: "Welcome to Patel Crop Products! 🎉",
+      html: `
+        <h2>Hello ${fullName},</h2>
+        <p>Thank you for registering at <b>Patel Crop Products</b>!</p>
+        <p>Your account has been created successfully.</p>
+        <br/>
+        <p>Regards,<br/>Patel Crop Products Team</p>
+      `,
+    });
+  } catch (emailError) {
+    console.error("Email sending failed:", emailError);
+    // Registration still succeeds even if email fails
+  }
 
   return res
     .status(201)
-    .json(new ApiResponse(201, createdUser, "User registered successfully & email sent"));
+    .json(new ApiResponse(201, createdUser, "User registered successfully"));
 });
+
 
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password, username } = req.body;
@@ -199,7 +215,7 @@ const loginUser = asyncHandler(async (req, res) => {
   });
 
   if (!user) {
-    throw new ApiError(404, "user not exist");
+    throw new ApiError(404, "User does not exist");
   }
 
   // Validate password
@@ -213,28 +229,33 @@ const loginUser = asyncHandler(async (req, res) => {
     user._id
   );
 
-  // ⬅️ Save refreshToken into DB
-  user.refreshToken = refreshToken;
-  await user.save({ validateBeforeSave: false });
-
   // Exclude sensitive fields
   const loggedInUser = await User.findById(user._id).select(
     "-password -refreshToken"
   );
 
+  // Cookie options - Better for production
   const options = {
     httpOnly: true,
-    secure: true, // change to false if testing without https
+    secure: process.env.NODE_ENV === 'production', // Only secure in production
+    sameSite: 'lax', // Better CORS handling
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
   };
 
   return res
     .status(200)
     .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
+    .cookie("refreshToken", refreshToken, { ...options, maxAge: 10 * 24 * 60 * 60 * 1000 }) // 10 days for refresh token
     .json(
       new ApiResponse(
         200,
-        { user: loggedInUser, accessToken, refreshToken },
+        { 
+          user: loggedInUser, 
+          token: accessToken,        // Frontend expects 'token'
+          accessToken,               // Keep this for API calls
+          refreshToken,
+          success: true              // Add success flag
+        },
         "User logged in successfully"
       )
     );

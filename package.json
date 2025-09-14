@@ -3,37 +3,40 @@
   "version": "1.0.0",
   "description": "a backend project",
   "type": "module",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node -r dotenv/config --experimental-json-modules src/index.js",
-    "dev": "nodemon -r dotenv/config --experimental-json-modules src/index.js"
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "clean": "rm -rf node_modules package-lock.json && npm install"
   },
   "keywords": [
     "js",
     "backend",
     "node"
   ],
-  "author": "\"Lucky Verma\"",
+  "author": "Lucky Verma",
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^24.3.0",
     "nodemon": "^3.1.10"
   },
   "dependencies": {
-    "bcrypt": "^6.0.0",
+    "bcrypt": "^5.1.1",
     "cloudinary": "^2.7.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.1",
-    "express": "^5.1.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
     "express-async-handler": "^1.2.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.18.0",
     "mongoose-aggregate-paginate-v2": "^1.1.4",
     "mongoose-paginate-v2": "^1.9.1",
-    "multer": "^2.0.2",
-    "node": "^22.19.0",
-    "nodemailer": "^7.0.6",
+    "multer": "^1.4.5-lts.1",
+    "nodemailer": "^6.9.17",
     "prettier": "^3.6.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

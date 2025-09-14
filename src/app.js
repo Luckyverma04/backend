@@ -1,55 +1,127 @@
+// src/app.js - Clean Express 4.x version
 import express from "express";
-import cookieParser from "cookie-parser";
 import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
+import cookieParser from "cookie-parser";
+import dotenv from "dotenv";
 
-import userRouter from "./routes/user.routes.js";
-import videoRouter from "./routes/video.routes.js";
-import commentRouter from "./routes/comment.routes.js";
+// Load environment variables
+dotenv.config();
+
+console.log("🔥 Initializing Express 4.x app...");
 
 const app = express();
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
-// ✅ Allowed origins (from env or hardcoded)
-const allowedOrigins = ["https://patelcropproducts.onrender.com"];
+// ✅ CORS configuration
+const allowedOrigins = [
+  "https://patelcropproducts.onrender.com",
+  "http://localhost:5173",
+  "http://localhost:3000"
+];
 
-// ✅ Global CORS middleware
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // allow tools like Postman
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      callback(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  })
-);
+app.use(cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+}));
 
-// ✅ Parse JSON & URL-encoded data
+// ✅ Basic middleware
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
 
-// ✅ Static files
-app.use(express.static("public"));
-
-// ✅ API Routes
-app.use("/api/v1/users", userRouter);
-app.use("/api/v1/videos", videoRouter);
-app.use("/api/v1/comments", commentRouter);
-
-// ✅ Frontend dist folder
-app.use(express.static(path.join(__dirname, "dist")));
-app.get(/^\/(?!api).*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html"));
+// ✅ Simple routes (no complex parameters)
+app.get("/", (req, res) => {
+  console.log("✅ Root route accessed");
+  res.json({ 
+    message: "🚀 Express 4.x Server Working!",
+    timestamp: new Date().toISOString(),
+    version: "Express 4.x",
+    status: "healthy"
+  });
 });
 
-// ✅ Test route
 app.get("/api/v1/test", (req, res) => {
-  res.json({ message: "API is working" });
+  console.log("✅ API test route accessed");
+  res.json({ 
+    message: "✅ API Test Route Working!",
+    status: "OK",
+    cors: "enabled",
+    allowedOrigins: allowedOrigins
+  });
 });
 
-export { app };
+app.post("/api/v1/users/login", (req, res) => {
+  console.log("🔑 Login route accessed:", req.body);
+  
+  try {
+    const { email, username, password } = req.body;
+    
+    // Validate required fields
+    if (!password || (!email && !username)) {
+      return res.status(400).json({
+        success: false,
+        message: "Email/username and password are required"
+      });
+    }
+    
+    // Mock successful login
+    res.json({
+      success: true,
+      message: "Login successful",
+      user: { 
+        id: "test-user-123", 
+        email: email || `${username}@example.com`,
+        username: username || email.split('@')[0]
+      },
+      token: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.test.token"
+    });
+    
+  } catch (error) {
+    console.error("❌ Login error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: error.message
+    });
+  }
+});
+
+// ✅ Health check route
+app.get("/api/v1/health", (req, res) => {
+  res.json({
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// ✅ 404 handler
+app.use("*", (req, res) => {
+  console.log(`❌ 404: ${req.method} ${req.url}`);
+  res.status(404).json({
+    success: false,
+    message: `Route not found: ${req.method} ${req.url}`,
+    availableRoutes: [
+      "GET /",
+      "GET /api/v1/test",
+      "GET /api/v1/health",
+      "POST /api/v1/users/login"
+    ]
+  });
+});
+
+// ✅ Error handler
+app.use((err, req, res, next) => {
+  console.error("💥 Global error:", err);
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || "Internal server error",
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+console.log("✅ Express 4.x app configured successfully");
+
+export default app;

@@ -1,56 +1,55 @@
 import express from "express";
-import cookieparser from "cookie-parser";
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const app = express();
-
-// Get __dirname equivalent for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// ✅ Prepare allowed origins (support multiple, separated by commas)
-const allowedOrigins = process.env.CORS_ORIGIN?.split(",") || [];
-
-// ✅ CORS middleware with origin check
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, curl, Postman)
-      if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.warn(`❌ CORS blocked request from: ${origin}`);
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
-    credentials: true,
-  })
-);
-
-app.use(express.json({ limit: "16kb" }));
-app.use(express.urlencoded({ extended: true, limit: "16kb" }));
-app.use(express.static("public"));
-app.use(cookieparser());
-
-// Routes
 import userRouter from "./routes/user.routes.js";
 import videoRouter from "./routes/video.routes.js";
 import commentRouter from "./routes/comment.routes.js";
 
+const app = express();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// ✅ Allowed origins (from env or hardcoded)
+const allowedOrigins = ["https://patelcropproducts.onrender.com"];
+
+// ✅ Global CORS middleware
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // allow tools like Postman
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  })
+);
+
+// ✅ Parse JSON & URL-encoded data
+app.use(express.json({ limit: "16kb" }));
+app.use(express.urlencoded({ extended: true, limit: "16kb" }));
+app.use(cookieParser());
+
+// ✅ Static files
+app.use(express.static("public"));
+
+// ✅ API Routes
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/videos", videoRouter);
 app.use("/api/v1/comments", commentRouter);
 
-// ✅ Serve frontend dist folder
+// ✅ Frontend dist folder
 app.use(express.static(path.join(__dirname, "dist")));
-
-// ✅ Fallback for frontend routes (ONLY for non-API paths)
 app.get(/^\/(?!api).*/, (req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
+});
+
+// ✅ Test route
+app.get("/api/v1/test", (req, res) => {
+  res.json({ message: "API is working" });
 });
 
 export { app };

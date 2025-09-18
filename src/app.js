@@ -18,20 +18,21 @@ console.log("📦 Initializing Express application...");
 // ✅ CRITICAL: Trust proxy for Render
 app.set('trust proxy', 1);
 
-// ✅ CORS Configuration - Fixed for your domains
+// ✅ CORS Configuration - Using your actual domains
 const allowedOrigins = [
-  "https://patelcropproducts.onrender.com",           // Your frontend
-  "https://patelcropproducts-backend.onrender.com",   // Your backend (for testing)
-  "http://localhost:3000",                            // Local development
-  "http://localhost:5173",                            // Vite dev server
-  "http://localhost:3001",                            // Alternative local port
-  "http://127.0.0.1:3000",                           // Alternative localhost
-  "http://127.0.0.1:5173"                            // Alternative localhost
+  process.env.CORS_ORIGIN || "https://patelcropproducts.onrender.com", // Your frontend URL
+  "https://patelcropproducts.onrender.com",          // Your frontend
+
+  "http://localhost:3000",                           // Local React dev
+  "http://localhost:5173",                           // Local Vite dev
+  "http://localhost:3001",                           // Alternative local port
+  "http://127.0.0.1:3000",                          // Alternative localhost
+  "http://127.0.0.1:5173"                           // Alternative localhost
 ];
 
 console.log("🌍 Configured CORS origins:", allowedOrigins);
 
-// ✅ CORS Middleware
+// ✅ CORS Middleware - Simplified for production
 app.use(cors({
   origin: function(origin, callback) {
     console.log(`📡 CORS check for origin: ${origin || 'no-origin'}`);
@@ -48,7 +49,13 @@ app.use(cors({
       return callback(null, true);
     }
     
-    // Log and reject
+    // In development, be more permissive
+    if (process.env.NODE_ENV === 'development') {
+      console.log("🔧 Development mode - allowing origin:", origin);
+      return callback(null, true);
+    }
+    
+    // Log and reject in production
     console.log("❌ Origin rejected:", origin);
     console.log("📋 Allowed origins:", allowedOrigins);
     return callback(new Error(`CORS: Origin ${origin} not allowed`), false);
@@ -65,43 +72,13 @@ app.use(cors({
     'Set-Cookie'
   ],
   exposedHeaders: ['Set-Cookie'],
-  optionsSuccessStatus: 200 // For legacy browser support
+  optionsSuccessStatus: 200
 }));
-
-// ✅ Manual CORS headers (backup for Render)
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  
-  // Log all requests
-  console.log(`📨 ${req.method} ${req.path} from ${origin || 'no-origin'}`);
-  
-  // Set CORS headers for allowed origins
-  if (!origin || allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin || '*');
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-    res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS,PATCH');
-    res.setHeader('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization,Cookie');
-    res.setHeader('Access-Control-Expose-Headers', 'Set-Cookie');
-  }
-  
-  // Handle preflight requests
-  if (req.method === 'OPTIONS') {
-    console.log("🔄 Handling preflight request for:", req.path);
-    return res.status(200).end();
-  }
-  
-  next();
-});
 
 // ✅ Request logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
-  console.log(`[${timestamp}] ${req.method} ${req.path}`);
-  
-  if (req.body && Object.keys(req.body).length > 0) {
-    console.log("📝 Request body keys:", Object.keys(req.body));
-  }
-  
+  console.log(`[${timestamp}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
   next();
 });
 
@@ -124,24 +101,30 @@ app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(cookieParser());
 
-// ✅ Static files middleware
+// ✅ Static files middleware (for uploaded files, images etc.)
 app.use(express.static("public"));
 
-// ✅ Root endpoint for testing
+// ✅ Root endpoint - MODIFIED to indicate this is backend only
 app.get('/', (req, res) => {
   console.log("🏠 Root endpoint accessed");
   res.json({
-    message: "🎉 Patel Crop Products Backend is running!",
+    message: "🚀 Patel Crop Products Backend API",
+    description: "This is the backend API server. Frontend is deployed separately.",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
     version: "1.0.0",
     status: "healthy",
+    frontend_url: process.env.CORS_ORIGIN || "Not configured",
     endpoints: {
       health: "/api/v1/health",
       cors_test: "/api/v1/cors-test",
       users: "/api/v1/users/*",
       videos: "/api/v1/videos/*",
       comments: "/api/v1/comments/*"
+    },
+    docs: {
+      api_base: `${req.protocol}://${req.get('host')}/api/v1`,
+      note: "This is a REST API. Visit your frontend URL to access the website."
     }
   });
 });
@@ -153,16 +136,19 @@ app.get("/api/v1/health", (req, res) => {
   
   res.status(200).json({ 
     status: "OK", 
-    message: "API is working perfectly!",
+    message: "Backend API is working perfectly!",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
+    server: "Render Backend",
+    uptime: Math.floor(process.uptime()),
+    memory: {
+      used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+      total: Math.round(process.memoryUsage().heapTotal / 1024 / 1024) + 'MB'
+    },
     cors: {
       allowedOrigins: allowedOrigins,
       requestOrigin: origin
-    },
-    server: "Render",
-    uptime: process.uptime(),
-    memory: process.memoryUsage()
+    }
   });
 });
 
@@ -174,9 +160,9 @@ app.get("/api/v1/cors-test", (req, res) => {
   res.json({
     message: "CORS test successful! ✅",
     origin: origin,
-    allowedOrigins: allowedOrigins,
     timestamp: new Date().toISOString(),
-    headers: {
+    server: "Backend API",
+    cors_headers: {
       'access-control-allow-origin': res.getHeader('Access-Control-Allow-Origin'),
       'access-control-allow-credentials': res.getHeader('Access-Control-Allow-Credentials')
     }
@@ -190,29 +176,8 @@ app.use("/api/v1/videos", videoRouter);
 app.use("/api/v1/comments", commentRouter);
 console.log("✅ API routes registered successfully");
 
-// ✅ Serve static files from dist folder (for production build)
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, "dist")));
-  
-  // Catch-all handler for SPA routing
-  app.get('*', (req, res, next) => {
-    // Skip API routes
-    if (req.path.startsWith('/api')) {
-      return next();
-    }
-    
-    const indexPath = path.join(__dirname, "dist", "index.html");
-    res.sendFile(indexPath, (err) => {
-      if (err) {
-        console.error('Error serving index.html:', err);
-        res.status(500).json({ 
-          error: 'Internal Server Error',
-          message: 'Could not serve static files'
-        });
-      }
-    });
-  });
-}
+// ✅ REMOVED: Static file serving for frontend (since frontend is deployed separately)
+// This backend should only serve API endpoints, not frontend files
 
 // ✅ 404 handler for API routes
 app.use('/api/*', (req, res) => {
@@ -222,17 +187,35 @@ app.use('/api/*', (req, res) => {
     path: req.path,
     method: req.method,
     timestamp: new Date().toISOString(),
-    availableEndpoints: [
-      'GET /',
-      'GET /api/v1/health',
-      'GET /api/v1/cors-test',
-      'POST /api/v1/users/login',
-      'POST /api/v1/users/register',
-      'GET /api/v1/users/*',
-      'GET /api/v1/videos/*',
-      'GET /api/v1/comments/*'
-    ],
-    hint: "Check if your route exists and the HTTP method is correct"
+    message: "This endpoint does not exist on the backend API",
+    availableEndpoints: {
+      "GET /": "API info",
+      "GET /api/v1/health": "Health check",
+      "GET /api/v1/cors-test": "CORS test",
+      "POST /api/v1/users/register": "User registration",
+      "POST /api/v1/users/login": "User login",
+      "GET /api/v1/users/profile": "Get user profile",
+      "GET /api/v1/videos": "Get videos",
+      "POST /api/v1/videos": "Create video",
+      "GET /api/v1/comments": "Get comments",
+      "POST /api/v1/comments": "Create comment"
+    },
+    hint: "Check the API documentation or use the correct HTTP method"
+  });
+});
+
+// ✅ 404 handler for non-API routes
+app.use('*', (req, res) => {
+  console.log("❌ 404 - Route not found:", req.method, req.path);
+  res.status(404).json({
+    error: 'Route not found',
+    message: 'This is a backend API server. Frontend is deployed separately.',
+    path: req.path,
+    method: req.method,
+    timestamp: new Date().toISOString(),
+    frontend_url: process.env.CORS_ORIGIN || "Configure CORS_ORIGIN environment variable",
+    api_base: "/api/v1",
+    hint: "Visit the frontend URL to access the website, or use /api/v1/* for API endpoints"
   });
 });
 
@@ -254,7 +237,7 @@ app.use((err, req, res, next) => {
       message: 'Origin not allowed by CORS policy',
       origin: req.headers.origin,
       allowedOrigins: allowedOrigins,
-      hint: "Make sure your frontend URL is in the allowed origins list"
+      solution: "Add your frontend URL to the CORS_ORIGIN environment variable"
     });
   }
   

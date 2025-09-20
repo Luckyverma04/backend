@@ -20,8 +20,8 @@ app.set('trust proxy', 1);
 
 // ✅ CORS Configuration - Using your actual domains
 const allowedOrigins = [
-  process.env.CORS_ORIGIN || "https://patelcropproducts.onrender.com", // Your frontend URL
-  "https://patelcropproducts.onrender.com",          // Your frontend
+  process.env.CORS_ORIGIN || "https://patelcropproducts-34yo.onrender.com", // Your frontend URL
+  "https://patelcropproducts-34yo.onrender.com",          // Your frontend
 
   "http://localhost:3000",                           // Local React dev
   "http://localhost:5173",                           // Local Vite dev

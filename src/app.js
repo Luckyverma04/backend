@@ -22,7 +22,6 @@ app.set('trust proxy', 1);
 const allowedOrigins = [
   process.env.CORS_ORIGIN || "https://patelcropproducts-34yo.onrender.com", // Your frontend URL
   "https://patelcropproducts-34yo.onrender.com",          // Your frontend
-
   "http://localhost:3000",                           // Local React dev
   "http://localhost:5173",                           // Local Vite dev
   "http://localhost:3001",                           // Alternative local port
@@ -118,6 +117,7 @@ app.get('/', (req, res) => {
     endpoints: {
       health: "/api/v1/health",
       cors_test: "/api/v1/cors-test",
+      placeholder: "/api/v1/placeholder/:width/:height",
       users: "/api/v1/users/*",
       videos: "/api/v1/videos/*",
       comments: "/api/v1/comments/*"
@@ -169,15 +169,35 @@ app.get("/api/v1/cors-test", (req, res) => {
   });
 });
 
+// ✅ Placeholder image endpoint (fixes the 404 error)
+app.get("/api/v1/placeholder/:width/:height", (req, res) => {
+  const { width, height } = req.params;
+  const validWidth = Math.min(Math.max(parseInt(width) || 300, 50), 2000);
+  const validHeight = Math.min(Math.max(parseInt(height) || 300, 50), 2000);
+  
+  console.log(`🖼️ Placeholder image request: ${validWidth}x${validHeight}`);
+  
+  // Generate a simple SVG placeholder
+  const svg = `
+    <svg width="${validWidth}" height="${validHeight}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="100%" height="100%" fill="#f3f4f6"/>
+      <text x="50%" y="50%" font-family="Arial, sans-serif" font-size="16" fill="#6b7280" text-anchor="middle" dy=".3em">
+        ${validWidth} × ${validHeight}
+      </text>
+    </svg>
+  `;
+  
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+  res.send(svg);
+});
+
 // ✅ API Routes
 console.log("🛣️  Registering API routes...");
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/videos", videoRouter);
 app.use("/api/v1/comments", commentRouter);
 console.log("✅ API routes registered successfully");
-
-// ✅ REMOVED: Static file serving for frontend (since frontend is deployed separately)
-// This backend should only serve API endpoints, not frontend files
 
 // ✅ 404 handler for API routes
 app.use('/api/*', (req, res) => {
@@ -192,9 +212,17 @@ app.use('/api/*', (req, res) => {
       "GET /": "API info",
       "GET /api/v1/health": "Health check",
       "GET /api/v1/cors-test": "CORS test",
+      "GET /api/v1/placeholder/:width/:height": "Placeholder images",
       "POST /api/v1/users/register": "User registration",
       "POST /api/v1/users/login": "User login",
-      "GET /api/v1/users/profile": "Get user profile",
+      "GET /api/v1/users/current-user": "Get current user",
+      "POST /api/v1/users/logout": "User logout",
+      "POST /api/v1/users/change-password": "Change password",
+      "PATCH /api/v1/users/avatar": "Upload avatar",
+      "PATCH /api/v1/users/cover-image": "Upload cover image",
+      "PATCH /api/v1/users/update-account": "Update account",
+      "POST /api/v1/users/refresh-token": "Refresh token",
+      "GET /api/v1/users/watch-history": "Get watch history",
       "GET /api/v1/videos": "Get videos",
       "POST /api/v1/videos": "Create video",
       "GET /api/v1/comments": "Get comments",
@@ -258,4 +286,5 @@ app.use((err, req, res, next) => {
 
 console.log("✅ Express application configured successfully");
 
+// ✅ CRITICAL: Make sure this export is at the very end
 export { app };

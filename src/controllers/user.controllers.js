@@ -327,35 +327,59 @@ try {
 })
 
 const changeCurrentUserPassword = asyncHandler(async(req,res)=>{
-  const {oldPassword, newPassword, confirmPassword} = req.body
+  try {
+    const {oldPassword, newPassword, confirmPassword} = req.body
+    
+    console.log('=== PASSWORD CHANGE DEBUG ===');
+    console.log('User ID:', req.user?._id);
+    console.log('User Email:', req.user?.email);
+    console.log('Old Password:', oldPassword);
+    console.log('New Password:', newPassword);
+    console.log('Confirm Password:', confirmPassword);
+    console.log('=============================');
 
-  // Add validation for required fields
-  if (!oldPassword || !newPassword || !confirmPassword) {
-    throw new ApiError(400, "All password fields are required")
+    // Add validation for required fields
+    if (!oldPassword || !newPassword || !confirmPassword) {
+        console.log('❌ Missing fields:', { oldPassword: !!oldPassword, newPassword: !!newPassword, confirmPassword: !!confirmPassword });
+        throw new ApiError(400, "All password fields are required")
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) {
+        console.log('❌ User not found');
+        throw new ApiError(404, "User not found")
+    }
+
+    console.log('🔍 Checking password correctness...');
+    const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
+    console.log('Password correct:', isPasswordCorrect);
+
+    if(!isPasswordCorrect){
+        console.log('❌ Old password incorrect');
+        throw new ApiError(400, "Current password is incorrect")
+    }
+
+    if(newPassword !== confirmPassword){
+        console.log('❌ New passwords do not match');
+        throw new ApiError(400, "New password and confirm password do not match")
+    }
+
+    if (oldPassword === newPassword) {
+        console.log('❌ New password same as old');
+        throw new ApiError(400, "New password must be different from old password")
+    }
+
+    user.password = newPassword
+    await user.save({validateBeforeSave: false})
+
+    console.log('✅ Password changed successfully');
+    return res.status(200).json(new ApiResponse(200, null, "Password changed successfully"))
+    
+  } catch (error) {
+    console.error('💥 Password change error:', error);
+    throw error;
   }
-
-  const user = await User.findById(req.user._id)
-  const isPasswordCorrect = await user.isPasswordCorrect(oldPassword)
-
-  if(!isPasswordCorrect){
-    throw new ApiError(400,"Old password is incorrect")
-  }
-
-  if(newPassword !== confirmPassword){
-    throw new ApiError(400,"New password and confirm password do not match")
-  }
-
-  // Optional: Check if new password is different from old password
-  if (oldPassword === newPassword) {
-    throw new ApiError(400, "New password must be different from old password")
-  }
-
-  user.password = newPassword
-  await user.save({validateBeforeSave: false})
-
-  return res.status(200).json(new ApiResponse(200, null, "Password changed successfully"))
 })
-
 const getCurrentUser = asyncHandler(async(req,res)=>{
   return res.status(200)
   .json(new ApiResponse(200,req.user,"user details fetched successfully"))

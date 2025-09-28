@@ -28,8 +28,8 @@ const userSchema = new Schema(
 
     // ✅ avatar object
     avatar: {
-      url: { type: String, required: true },
-      public_id: { type: String, required: true },
+      url: { type: String },
+      public_id: { type: String },
     },
 
     // ✅ cover image object
@@ -49,9 +49,18 @@ const userSchema = new Schema(
       type: String,
       required: [true, "Password is required"],
     },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
 
     refreshToken: {
       type: String,
+    },
+     role: {
+      type: String,
+      enum: ["user", "admin", "moderator"],
+      default: "user",
     },
   },
   { timestamps: true }
@@ -77,6 +86,7 @@ userSchema.methods.generateAccessToken = function () {
       email: this.email,
       username: this.username,
       fullName: this.fullName,
+       role: this.role || "user"
     },
     process.env.ACCESS_TOKEN_SECRET,
     {

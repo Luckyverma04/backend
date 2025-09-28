@@ -262,24 +262,39 @@ const loginUser = asyncHandler(async (req, res) => {
 });
 
 
-const logoutUser = asyncHandler(async(req,res)=>{
+const logoutUser = asyncHandler(async (req, res) => {
+  try {
+    // ✅ Update user status to inactive and clear refresh token
+    await User.findByIdAndUpdate(
+      req.user._id,
+      {
+        $unset: { refreshToken: 1 }, // Proper way to remove field
+        $set: { 
+          isActive: false, // Set user as inactive
+          lastLogout: new Date() // Optional: track logout time
+        }
+      },
+      {
+        new: true
+      }
+    );
 
-await User.findByIdAndUpdate(req.user._id,{
-  $set:{refreshToken:undefined}
-  },
-{
-  new:true
-})
+    const options = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // Use environment check
+    };
 
-const options ={
-  httpOnly :true,
-  secure:true,
-
-}
-return res.status(200).clearCookie("accessToken",options)
-.clearCookie("refreshToken",options)
-.json(new ApiResponse(200,null,"logged out successfully"))
-})
+    return res
+      .status(200)
+      .clearCookie("accessToken", options)
+      .clearCookie("refreshToken", options)
+      .json(new ApiResponse(200, null, "User logged out successfully"));
+      
+  } catch (error) {
+    console.error("Logout error:", error);
+    throw new ApiError(500, "Error during logout");
+  }
+});
 
 const refreshAccessToken = asyncHandler(async(req,res)=>{
 const incomingRefreshToken =  req.cookies.refreshToken || req.body.refreshToken

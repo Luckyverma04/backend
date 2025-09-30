@@ -12,6 +12,7 @@ import commentRouter from "./routes/comment.routes.js";
 // ✅ ADD THESE TWO IMPORTS
 import adminRouter from "./routes/admin.routes.js";
 import productRouter from "./routes/product.routes.js";
+import enquiryRoutes from "./routes/enquiry.routes.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -125,7 +126,7 @@ app.use("/api/v1/comments", commentRouter);
 // ✅ ADDED: Admin and Product routes - FIXED ORDER
 app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1", productRouter); // This should come after specific routes
-
+app.use("/api/v1/enquiries", enquiryRoutes);
 console.log("✅ API routes registered successfully");
 
 // ✅ 404 handler for API routes

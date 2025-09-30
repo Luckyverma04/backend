@@ -55,6 +55,9 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
 }));
 
+// ✅ ADD THIS LINE: Handle OPTIONS preflight requests
+app.options('*', cors()); // 👈 THIS IS THE ONLY LINE I ADDED
+
 // ✅ Request logging middleware
 app.use((req, res, next) => {
   const timestamp = new Date().toISOString();
@@ -88,7 +91,7 @@ app.use(express.static("public"));
 app.get('/', (req, res) => {
   res.json({
     message: "🚀 Patel Crop Products Backend API",
-    description: "This is the backend API server. Frontend is deployed separately.",
+    description: "This is a backend API server. Frontend is deployed separately.",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development",
     version: "1.0.0",
@@ -170,6 +173,11 @@ app.use((err, req, res, next) => {
     })
   });
 });
+setInterval(() => {
+  fetch("https://patelcropproducts.onrender.com/")  // apna backend URL
+    .then(() => console.log("✅ Pinged server to keep alive"))
+    .catch((err) => console.log("❌ Ping failed:", err.message));
+}, 5 * 60 * 1000);
 
 console.log("✅ Express application configured successfully");
 

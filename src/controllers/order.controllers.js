@@ -7,6 +7,9 @@ export const createOrder = async (req, res) => {
     const { items, shippingAddress, totalAmount, paymentMethod, notes } = req.body;
     const userId = req.user?._id;
 
+    // Generate orderId
+    const orderId = `ORD-${Math.floor(100000 + Math.random() * 900000)}`;
+
     // Validate items and stock
     for (let item of items) {
       const product = await Product.findById(item.product);
@@ -25,6 +28,7 @@ export const createOrder = async (req, res) => {
     }
 
     const order = new Order({
+      orderId,   // <—— FIXED HERE
       user: userId,
       items,
       shippingAddress,
@@ -57,6 +61,7 @@ export const createOrder = async (req, res) => {
     });
   }
 };
+
 
 // Get all orders (Admin)
 export const getAllOrders = async (req, res) => {
